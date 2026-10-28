@@ -1,0 +1,49 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pulseguard-golden-signals
+  namespace: pulseguard-prod
+spec:
+  groups:
+  - name: pulseguard.sre.rules
+    rules:
+    # 1. Golden Signal: Latency (P99 > 500ms over 5 minutes)
+    - alert: PulseGuardHighP99Latency
+      expr: |
+        histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint)) > 0.5
+      for: 3m
+      labels:
+        severity: warning
+        service: pulseguard-api
+      annotations:
+        summary: "High P99 latency detected on {{ $labels.endpoint }}"
+        description: "99th percentile latency is {{ $value | humanizeDuration }} (SLA threshold: 500ms)."
+        runbook_url: "https://github.com/heinhtetzaw/pulseguard-devsecops-platform/blob/main/README.md#runbook-high-latency"
+
+    # 2. Golden Signal: Error Rate (HTTP 5xx > 2% of total traffic)
+    - alert: PulseGuardHighErrorRate
+      expr: |
+        (
+          sum(rate(http_requests_total{http_status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+        ) * 100 > 2
+      for: 2m
+      labels:
+        severity: critical
+        service: pulseguard-api
+      annotations:
+        summary: "HTTP 5xx Error Rate exceeding 2% SLO"
+        description: "Current 5xx error rate is {{ printf \"%.2f\" $value }}%. Immediate triage required."
+        runbook_url: "https://github.com/heinhtetzaw/pulseguard-devsecops-platform/blob/main/README.md#runbook-5xx-spike"
+
+    # 3. Saturation / Pod Stability: CrashLoopBackOff detection
+    - alert: PulseGuardPodCrashLooping
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="pulseguard-prod"}[15m]) * 60 * 5 > 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Pod {{ $labels.pod }} is restarting frequently"
+        description: "Container {{ $labels.container }} in pod {{$labels.pod }} has restarted multiple times in the last 15 minutes."

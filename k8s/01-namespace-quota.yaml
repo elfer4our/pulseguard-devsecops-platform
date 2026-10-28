@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pulseguard-prod
+  labels:
+    name: pulseguard-prod
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: prod-compute-quota
+  namespace: pulseguard-prod
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+    pods: "15"
